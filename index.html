@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strange Attractors — Multi Engine</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────── */
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  height:100%; background:#07070f; overflow:hidden;
+  font-family:'JetBrains Mono','Fira Code','Cascadia Code',Consolas,Menlo,monospace;
+}
+
+/* ── Layout ───────────────────────────────────────────────────────── */
+#app { width:100%; height:100%; position:relative; }
+canvas {
+  position:absolute; left:0; top:0;
+  width:calc(100% - 262px); height:100%;
+  display:block; cursor:crosshair;
+}
+
+/* ── Control panel ────────────────────────────────────────────────── */
+#panel {
+  position:absolute; right:0; top:0; width:262px; height:100%;
+  overflow-y:auto; background:#0b0b1a; border-left:1px solid #1c2840;
+  padding:14px; font-size:12px; color:#8898b8;
+}
+#panel::-webkit-scrollbar { width:4px; }
+#panel::-webkit-scrollbar-track { background:#07070f; }
+#panel::-webkit-scrollbar-thumb { background:#1c2840; border-radius:2px; }
+
+/* ── Typography ───────────────────────────────────────────────────── */
+.title  { font-size:11px; font-weight:500; color:#6a8ec8; letter-spacing:3px; margin-bottom:12px; }
+.sec    { font-size:9px; color:#3a4a62; text-transform:uppercase; letter-spacing:1.5px; margin:10px 0 5px; }
+.hint   { font-size:10px; color:#3a4a62; line-height:1.65; margin-bottom:6px; }
+.sep    { border:none; border-top:1px solid #111a2c; margin:10px 0; }
+.footer { font-size:10px; color:#2a3a52; line-height:1.9; padding-top:4px; }
+
+/* ── Formula box ──────────────────────────────────────────────────── */
+#formula {
+  font-size:10px; line-height:1.7; color:#6a8ec8;
+  background:#080f1e; border:1px solid #14203a; border-radius:5px;
+  padding:7px 8px; margin-bottom:4px;
+}
+#author { font-size:9px; color:#3a4a62; margin-bottom:4px; }
+
+/* ── Slider rows ──────────────────────────────────────────────────── */
+.row { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+.lbl { width:30px; font-size:10px; color:#7a9ec8; flex-shrink:0; }
+.val { width:48px; text-align:right; font-size:10px; color:#4a5a78; flex-shrink:0; }
+
+input[type=range] {
+  flex:1; -webkit-appearance:none; appearance:none; height:3px;
+  background:#1a2440; border-radius:2px; outline:none; cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:11px; height:11px;
+  background:#378ADD; border-radius:50%; cursor:pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width:11px; height:11px; background:#378ADD;
+  border-radius:50%; border:none; cursor:pointer;
+}
+input[type=color] {
+  flex:1; height:22px; padding:1px 3px;
+  border:1px solid #1c2840; border-radius:3px; background:none; cursor:pointer;
+}
+
+/* ── Selects ──────────────────────────────────────────────────────── */
+select {
+  width:100%; padding:6px 7px; background:#080f1e; color:#7a9ec8;
+  border:1px solid #1a2840; font:11px inherit; border-radius:5px;
+  margin-bottom:5px; outline:none; cursor:pointer;
+}
+select:focus { border-color:#378ADD; }
+#att { font-size:12px; padding:8px; color:#9ec0f0; border-color:#1f3460; background:#0a1428; }
+.inl { flex:1; margin-bottom:0; padding:3px 4px; font-size:10px; }
+
+/* ── Preset grid ──────────────────────────────────────────────────── */
+.presets { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:10px; }
+.pbtn {
+  background:#080f1e; border:1px solid #1a2840; color:#7a9ec8;
+  padding:6px 4px; font:10px/1.45 inherit; border-radius:5px;
+  cursor:pointer; text-align:center; transition:filter .15s;
+}
+.pbtn:hover { filter:brightness(1.35); }
+.pbtn small { color:#3f5578; font-size:9px; }
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.ebtn {
+  width:100%; padding:7px; background:#070e1c; color:#378ADD;
+  border:1px solid #1a3060; font:12px inherit; border-radius:5px;
+  cursor:pointer; margin-bottom:3px; transition:filter .15s;
+}
+.ebtn:hover:not(:disabled) { filter:brightness(1.3); }
+.ebtn:disabled { opacity:.4; cursor:default; }
+.sbtn {
+  padding:4px 8px; background:#080f1e; color:#5a7aa8;
+  border:1px solid #1a2840; font:10px inherit; border-radius:4px;
+  cursor:pointer; transition:filter .15s;
+}
+.sbtn:hover { filter:brightness(1.3); }
+
+/* ── Progress bars ────────────────────────────────────────────────── */
+#pbar  { height:2px; background:#080f1e; border-radius:2px; margin-top:7px; }
+#pfill { height:100%; background:#378ADD; border-radius:2px; width:0; transition:width .15s; }
+#pstat { font-size:10px; color:#3a4a62; margin-top:4px; min-height:14px; }
+#qbar  { height:2px; background:#1a2440; border-radius:2px; margin-top:5px; }
+#qfill { height:100%; background:#2a6030; border-radius:2px; width:0; transition:width .2s; }
+#qstat { font-size:10px; color:#3a4a62; margin-top:2px; min-height:12px; }
+
+/* ── Animation lanes ──────────────────────────────────────────────── */
+.arow { display:flex; align-items:center; gap:3px; margin-bottom:3px; }
+.arow input[type=checkbox] { flex-shrink:0; cursor:pointer; }
+.apsel {
+  flex:1; min-width:0; padding:2px 3px; background:#080f1e; color:#7a9ec8;
+  border:1px solid #1a2840; font:9px inherit; border-radius:3px; outline:none; cursor:pointer;
+}
+.anum {
+  width:44px; padding:2px 3px; background:#080f1e; color:#7a9ec8;
+  border:1px solid #1a2840; font:9px inherit; border-radius:3px;
+  outline:none; text-align:center; -moz-appearance:textfield;
+}
+.anum::-webkit-inner-spin-button, .anum::-webkit-outer-spin-button { -webkit-appearance:none; }
+.aarrow { color:#3a4a62; font-size:9px; flex-shrink:0; }
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="c"></canvas>
+<div id="panel">
+
+  <div class="title">⬡ STRANGE ATTRACTORS</div>
+
+  <!-- ── Attractor type (top) ─────────────────────────────────────── -->
+  <div class="sec">attractor type</div>
+  <select id="att"></select>
+  <div id="formula"></div>
+  <div id="author"></div>
+
+  <!-- ── Parameters (built dynamically per attractor) ─────────────── -->
+  <div class="sec">parameters</div>
+  <div id="params"></div>
+
+  <!-- ── Rendering ────────────────────────────────────────────────── -->
+  <div class="sec">rendering</div>
+  <div class="row"><span class="lbl">Qual</span>
+    <select id="qual" class="inl">
+      <option value="500000">Draft  (500K)</option>
+      <option value="2000000" selected>Good  (2M)</option>
+      <option value="5000000">Fine  (5M)</option>
+      <option value="10000000">Ultra  (10M)</option>
+    </select></div>
+  <div class="row"><span class="lbl">Exp</span><input type="range" id="exp" min="0.1" max="4" step="0.01" value="1.2"><span class="val" id="vexp">1.20</span></div>
+  <div class="row"><span class="lbl">Gam</span><input type="range" id="gam" min="0.1" max="1.5" step="0.01" value="0.42"><span class="val" id="vgam">0.42</span></div>
+  <div class="row"><span class="lbl">Pal</span>
+    <select id="pal" class="inl">
+      <option value="0">🔥 Fire</option>
+      <option value="1">🌊 Ocean</option>
+      <option value="2">💜 Plasma</option>
+      <option value="3">✨ Gold</option>
+      <option value="4">🌿 Mint</option>
+      <option value="5">⬜ Mono</option>
+      <option value="6" selected>🌈 Rainbow</option>
+      <option value="7">🍬 Pastel</option>
+    </select></div>
+  <div class="row"><span class="lbl">Hue</span><input type="range" id="hue" min="0" max="1" step="0.005" value="0"><span class="val" id="vhue">0.00</span></div>
+  <div class="row"><span class="lbl">Bg</span><input type="color" id="bgcol" value="#0a0a14"></div>
+  <div class="hint">Hue rotates the spatial colours of 🌈 Rainbow &amp; 🍬 Pastel.</div>
+  <div id="qbar"><div id="qfill"></div></div>
+  <div id="qstat"></div>
+
+  <!-- ── View / rotation ──────────────────────────────────────────── -->
+  <div class="sec">view / rotation</div>
+  <div class="hint">Right-click drag on canvas to rotate the attractor.</div>
+  <div class="row">
+    <span class="lbl">Rot</span>
+    <span class="val" id="vrot" style="width:auto;flex:1;text-align:left;">0.0°</span>
+    <button class="sbtn" onclick="setRot(0)">Reset</button>
+  </div>
+
+  <!-- ── Animation ────────────────────────────────────────────────── -->
+  <div class="sec">animation</div>
+  <div class="hint">Lanes adapt to the chosen attractor. Sine loop, ¼-period stagger.</div>
+  <div class="row"><span class="lbl">Spd</span><input type="range" id="aspd" min="0.02" max="1.0" step="0.01" value="0.18"><span class="val" id="vaspd">0.18</span></div>
+  <div id="lanes"></div>
+  <div class="row" style="margin-top:4px;">
+    <button id="playBtn" class="ebtn" onclick="toggleAnim()" style="flex:1;margin:0;">▶  Play</button>
+    <button class="sbtn" onclick="defaultLanes();buildLanes();" title="Centre all lanes around the current parameter values">⟲ Centre</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- ── Presets (built dynamically) ──────────────────────────────── -->
+  <div class="sec" id="presetTitle">presets</div>
+  <div class="presets" id="presets"></div>
+
+  <div class="sep"></div>
+
+  <!-- ── PNG export ───────────────────────────────────────────────── -->
+  <div class="sec">PNG export</div>
+  <div class="hint">Fresh auto-fitted histogram at export size (incl. rotation). 4K/8K may take 10–30 s.</div>
+  <select id="imgres">
+    <option value="1024">1K  (1024 × 1024)</option>
+    <option value="2048" selected>2K  (2048 × 2048)</option>
+    <option value="4096">4K  (4096 × 4096)</option>
+    <option value="8192">8K  (8192 × 8192)  ★</option>
+  </select>
+  <button class="ebtn" id="exportBtn" onclick="startExport()">⬇  Export PNG</button>
+  <div id="pbar"><div id="pfill"></div></div>
+  <div id="pstat"></div>
+
+  <div class="sep"></div>
+  <div class="footer">
+    11 attractors · Softology / Bourke formulas<br>
+    Auto-fit bounds · CPU histogram · GPU colour<br>
+    RGB32F density + direction hue · WebGL2<br>
+    Right-click drag to rotate
+  </div>
+</div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   ATTRACTOR LIBRARY
+   Each entry: params (label/min/max/step), presets, init state,
+   warm-up count and make(v) → step(s) that updates s.x / s.y in place.
+   All formulas verified numerically against every listed preset.
+   ═══════════════════════════════════════════════════════════════════ */
+/* p(label,min,max,step,int) */
+const p=(label,min,max,step=0.001,int=false,dec=3)=>({label,min,max,step,int,dec});
+const ATTRACTORS=[
+{ id:'bedhead', name:'Bedhead', author:'Ivan Emrich',
+  formula:"x′ = sin(x·y/b)·y + cos(a·x − y)<br>y′ = x + sin(y)/b",
+  params:[p('a',-1,1),p('b',-1,1)],
+  presets:[['#1',[0.65343,0.7345345]],['#2',[-0.81,-0.92]],['#3',[-0.64,0.76]],['#4',[0.06,0.98]],['#5',[-0.67,0.83]]],
+  init:()=>({x:1,y:1}), warm:50,
+  make:([a,b])=>{const ib=1/b;return s=>{const x=s.x,y=s.y;s.x=Math.sin(x*y*ib)*y+Math.cos(a*x-y);s.y=x+Math.sin(y)*ib;};}},
+{ id:'clifford', name:'Clifford', author:'Clifford A. Pickover',
+  formula:"x′ = sin(a·y) + c·cos(a·x)<br>y′ = sin(b·x) + d·cos(b·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-3,3)],
+  presets:[['#1',[-1.7,1.3,-0.1,-1.21]],['#2',[-1.7,1.8,-0.9,-0.4]],['#3',[1.5,-1.8,1.6,2]],['#4',[-2.239,-2.956,1.272,1.419]],['#5',[-1.7,1.8,-1.9,-0.4]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=Math.sin(a*y)+c*Math.cos(a*x);s.y=Math.sin(b*x)+d*Math.cos(b*y);}},
+{ id:'fractaldream', name:'Fractal Dream', author:'Clifford A. Pickover',
+  formula:"x′ = sin(b·y) + c·sin(b·x)<br>y′ = sin(a·x) + d·sin(a·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-3,3)],
+  presets:[['#1',[-0.966918,2.879879,0.765145,0.744728]],['#2',[-2.9585,-2.2965,-2.8829,-0.1622]],['#3',[-2.8276,1.2813,1.9655,0.597]],['#4',[-1.1554,-2.3419,-1.9799,2.1828]],['#5',[-1.9956,-1.4528,-2.6206,0.8517]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=Math.sin(b*y)+c*Math.sin(b*x);s.y=Math.sin(a*x)+d*Math.sin(a*y);}},
+{ id:'gumowskimira', name:'Gumowski-Mira', author:'I. Gumowski & C. Mira (CERN 1980)',
+  formula:"F(x) = b·x + 2(1−b)·x²/(1+x²)<br>x′ = y + a·(1 − σ·y²)·y + F(x)<br>y′ = F(x′) − x",
+  params:[p('a',-1,1,0.0001,false,4),p('b',-1,1,0.0001,false,4),p('x₀',-20,20,0.0001,false,4),p('y₀',-20,20,0.0001,false,4),p('σ',0,0.2,0.0001,false,4)],
+  presets:[['#1',[0.008,-0.7,0,0.5,0.05]],['#2',[0.79253300698474,0.345703079365194,-0.723135391715914,-0.327585775405169,0.05]],['#3',[0.579161538276821,-0.820410779677331,-0.312847771216184,-0.710899183526635,0.05]],['#4',[0.062683217227459,-0.436713613104075,-0.325819793157279,0.48573582014069,0.05]],['#5',[0.900278024375439,0.661233567167073,0.78662442881614,0.919355855789036,0.05]]],
+  init:([a,b,x0,y0])=>({x:x0,y:y0}), warm:0,
+  make:([a,b,x0,y0,sg])=>{const k=2*(1-b);return s=>{const x=s.x,y=s.y;
+    const nx=y+a*(1-sg*y*y)*y+b*x+k*x*x/(1+x*x);
+    s.x=nx; s.y=b*nx+k*nx*nx/(1+nx*nx)-x;};}},
+{ id:'hopalong', name:'Hopalong', author:'Barry Martin',
+  formula:"x′ = y − 1 − √|b·x − 1 − c| · sign(x − 1)<br>y′ = a − x − 1",
+  params:[p('a',0,10),p('b',0,10),p('c',0,10)],
+  presets:[['#1',[7.16878197155893,8.43659746693447,2.55983412731439]],['#2',[7.7867514709942,0.132189802825451,8.14610984409228]],['#3',[9.74546888144687,1.56320227775723,7.86818214459345]],['#4',[9.8724800767377,8.66862616268918,8.66950439289212]],['#5',[9.7671244922094,4.10973468795419,3.78332691499963]]],
+  init:()=>({x:0,y:0}), warm:0,
+  make:([a,b,c])=>s=>{const x=s.x,y=s.y;s.x=y-1-Math.sqrt(Math.abs(b*x-1-c))*Math.sign(x-1);s.y=a-x-1;}},
+{ id:'rampe1', name:'Jason Rampe 1', author:'Jason Rampe',
+  formula:"x′ = cos(b·y) + c·sin(b·x)<br>y′ = cos(a·x) + d·sin(a·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-3,3)],
+  presets:[['#1',[2.6,-2.5995,-2.9007,0.3565]],['#2',[1.8285,-1.8539,0.3816,1.9765]],['#3',[2.5425,2.8358,-0.8721,2.7044]],['#4',[-1.8669,1.2768,-2.9296,-0.4121]],['#5',[-2.7918,2.1196,1.0284,0.1384]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=Math.cos(b*y)+c*Math.sin(b*x);s.y=Math.cos(a*x)+d*Math.sin(a*y);}},
+{ id:'rampe2', name:'Jason Rampe 2', author:'Jason Rampe',
+  formula:"x′ = cos(b·y) + c·cos(b·x)<br>y′ = cos(a·x) + d·cos(a·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-3,3)],
+  presets:[['#1',[1.546,1.929,1.09,1.41]],['#2',[2.907,-1.9472,1.2833,1.3206]],['#3',[0.8875,0.7821,-2.3262,1.5379]],['#4',[-2.4121,-1.0028,-2.2386,0.274]],['#5',[-2.9581,0.927,2.7842,0.6267]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=Math.cos(b*y)+c*Math.cos(b*x);s.y=Math.cos(a*x)+d*Math.cos(a*y);}},
+{ id:'rampe3', name:'Jason Rampe 3', author:'Jason Rampe',
+  formula:"x′ = sin(b·y) + c·cos(b·x)<br>y′ = cos(a·x) + d·sin(a·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-3,3)],
+  presets:[['#1',[2.0246,-1.323,-2.8151,0.2277]],['#2',[1.4662,-2.3632,-0.4167,2.4162]],['#3',[-2.7564,-1.8234,2.8514,-0.8745]],['#4',[-2.218,1.4318,-0.3346,2.4993]],['#5',[1.2418,-2.4174,-0.7112,-1.9802]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=Math.sin(b*y)+c*Math.cos(b*x);s.y=Math.cos(a*x)+d*Math.sin(a*y);}},
+{ id:'svensson', name:'Johnny Svensson', author:'Johnny Svensson',
+  formula:"x′ = d·sin(a·x) − sin(b·y)<br>y′ = c·cos(a·x) + cos(b·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-7,7)],
+  presets:[['#1',[1.40,1.56,1.40,-6.56]],['#2',[-2.538,1.362,1.315,0.513]],['#3',[1.913,2.796,1.468,1.01]],['#4',[-2.337,-2.337,0.533,1.378]],['#5',[-2.722,2.574,1.284,1.043]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=d*Math.sin(a*x)-Math.sin(b*y);s.y=c*Math.cos(a*x)+Math.cos(b*y);}},
+{ id:'dejong', name:'Peter de Jong', author:'Peter de Jong',
+  formula:"x′ = sin(a·y) − cos(b·x)<br>y′ = sin(c·x) − cos(d·y)",
+  params:[p('a',-3,3),p('b',-3,3),p('c',-3,3),p('d',-3,3)],
+  presets:[['Classic',[-2,-2,-1.2,2]],['Lace',[0.970,-1.899,1.381,-1.506]],['Blob',[1.4,-2.3,2.4,-2.1]],['Web',[2.01,-2.53,1.61,-0.33]],['Sparse',[-2.7,-0.09,-0.86,-2.2]],['Rings',[-0.827,-1.637,1.659,-0.943]],['Veil',[-0.709,1.638,0.452,1.740]],['Swirl',[1.641,1.902,0.316,1.525]],['Flower',[-2.24,0.43,-0.65,-2.43]]],
+  init:()=>({x:0.1,y:0.1}), warm:100,
+  make:([a,b,c,d])=>s=>{const x=s.x,y=s.y;s.x=Math.sin(a*y)-Math.cos(b*x);s.y=Math.sin(c*x)-Math.cos(d*y);}},
+{ id:'symicon', name:'Symmetric Icon', author:'Field & Golubitsky — "Symmetry in Chaos"',
+  formula:"z′ = (λ + α·|z|² + β·Re(zⁿ))·z<br>&nbsp;&nbsp;&nbsp;&nbsp; + γ·z̄ⁿ⁻¹ + i·ω·z",
+  params:[p('λ',-3,3),p('α',-20,20),p('β',-20,20),p('γ',-2,2),p('ω',-1,1),p('n',2,25,1,true,0)],
+  presets:[['Chaotic Flower',[-2.5,5,-1.9,1,0.188,5]],['Clam Triple',[1.56,-1,0.1,-0.82,0.12,3]],['Emperor\'s Cloak',[-1.806,1.806,0,1,0,5]],['Fish and Eye',[-2.195,10,-12,1,0,3]],['Flintstone',[2.5,-2.5,0,0.9,0,3]],['French Glass',[-2.05,3,-16.79,1,0,9]],['Halloween',[-2.7,5,1.5,1.0,0,6]],['Kachina Dolls',[2.409,-2.5,0,0.9,0,23]],['Mayan Bracelet',[-2.08,1,-0.1,0.167,0,7]],['Pentacle',[-2.32,2.32,0,0.75,0,5]],['Pentagon',[2.6,-2,0,-0.5,0,5]],['Sanddollar',[-2.34,2,0.2,0.1,0,5]],['Swirling Streamers',[-1.86,2,0,1,0.1,4]],['Trampoline',[1.56,-1,0.1,-0.82,0,3]],['Trinity',[1.5,-1,0.1,-0.805,0,3]]],
+  init:()=>({x:0.01,y:0.01}), warm:100,
+  make:([L,A,B,G,O,D])=>{const n=Math.max(2,Math.round(D));return s=>{const x=s.x,y=s.y;
+    let zr=x,zi=y;for(let k=0;k<n-2;k++){const za=zr*x-zi*y;zi=zi*x+zr*y;zr=za;}
+    const zn=x*zr-y*zi;const pp=L+A*(x*x+y*y)+B*zn;
+    s.x=pp*x+G*zr-O*y;s.y=pp*y-G*zi+O*x;};}}
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════════════ */
+const P = {
+  att: 1,                         /* default: Clifford */
+  v: [],                          /* current parameter values */
+  exposure: 1.2, gamma: 0.42, palette: 6, hue: 0,
+  bgcol: [0.039, 0.039, 0.078]
+};
+let rotAngle    = 0;              /* display rotation (right-drag)      */
+let isExporting = false;          /* pauses render loop during export   */
+
+const cur = () => ATTRACTORS[P.att];
+const fmt = (pd, v) => pd.int ? String(Math.round(v)) : v.toFixed(pd.dec);
+const isFiniteState = s => s.x > -1e6 && s.x < 1e6 && s.y > -1e6 && s.y < 1e6;
+
+/* ═══════════════════════════════════════════════════════════════════
+   AUTO-BOUNDS  — robust percentile fit (ignores rare outliers)
+   so every attractor fills the canvas regardless of its scale.
+   ═══════════════════════════════════════════════════════════════════ */
+let bounds = null;
+
+function findBounds(att, v, N) {
+  const step = att.make(v);
+  let s = att.init(v);
+  for (let i = 0; i < att.warm; i++) { step(s); if (!isFiniteState(s)) s = att.init(v); }
+  const xs = new Float64Array(N), ys = new Float64Array(N);
+  let n = 0;
+  for (let i = 0; i < N; i++) {
+    step(s);
+    if (!isFiniteState(s)) { s = att.init(v); continue; }
+    xs[n] = s.x; ys[n] = s.y; n++;
+  }
+  if (n < 50) return { minX:-2, minY:-2, invR:0.25, cx:0, cy:0 };
+  const X = xs.subarray(0, n).sort(), Y = ys.subarray(0, n).sort();
+  const q = (a, f) => a[Math.min(n - 1, Math.max(0, Math.floor(n * f)))];
+  const lx = q(X, 0.0005), hx = q(X, 0.9995), ly = q(Y, 0.0005), hy = q(Y, 0.9995);
+  let range = Math.max(hx - lx, hy - ly);
+  const cx = (lx + hx) / 2, cy = (ly + hy) / 2;
+  if (!(range > 1e-9)) range = 1;               /* collapsed orbit fallback */
+  const half = range / 2 + range * 0.06;        /* 6 % margin, square frame */
+  return { minX:cx - half, minY:cy - half, invR:1 / (2 * half), cx, cy };
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HISTOGRAM
+   Per pixel: hit count + summed unit direction (cos, sin) from the
+   attractor centre. Averaging the direction vector (instead of the
+   raw angle) avoids a colour seam at ±180°.
+   Uploaded as RGB32F:  R = log-density,  G = avg cos,  B = avg sin
+   ═══════════════════════════════════════════════════════════════════ */
+const HW = 1024;
+const hist = new Uint32Array(HW * HW);
+const hC   = new Float32Array(HW * HW);
+const hS   = new Float32Array(HW * HW);
+const gpu  = new Float32Array(HW * HW * 3);
+let histMax = 0, totalPts = 0;
+let curState = null, curStep = null;
+let needsReset = true, displayDirty = false;
+
+function resetHistogram() {
+  hist.fill(0); hC.fill(0); hS.fill(0);
+  histMax = 0; totalPts = 0;
+  const att = cur();
+  const nb = findBounds(att, P.v, animPlaying ? 20000 : 60000);
+  if (animPlaying && bounds) {
+    /* smooth the frame during animation so the view doesn't jitter */
+    const k = 0.25, L = (a, b) => a + (b - a) * k;
+    const oHalf = 0.5 / bounds.invR, nHalf = 0.5 / nb.invR;
+    const ocx = bounds.minX + oHalf, ocy = bounds.minY + oHalf;
+    const cx = L(ocx, nb.minX + nHalf), cy = L(ocy, nb.minY + nHalf), h = L(oHalf, nHalf);
+    bounds = { minX:cx - h, minY:cy - h, invR:1 / (2 * h), cx:nb.cx, cy:nb.cy };
+  } else bounds = nb;
+
+  curStep  = att.make(P.v);
+  curState = att.init(P.v);
+  for (let i = 0; i < att.warm; i++) { curStep(curState); if (!isFiniteState(curState)) curState = att.init(P.v); }
+  needsReset = false; displayDirty = true;
+}
+
+function addBatch(n) {
+  const att = cur(), v = P.v, step = curStep;
+  const { minX, minY, invR, cx, cy } = bounds;
+  const k = invR * HW;
+  let s = curState, mx = histMax;
+  for (let i = 0; i < n; i++) {
+    step(s);
+    const x = s.x, y = s.y;
+    if (!(x > -1e6 && x < 1e6 && y > -1e6 && y < 1e6)) { s = att.init(v); continue; }
+    const fx = (x - minX) * k, fy = (y - minY) * k;
+    if (fx >= 0 && fx < HW && fy >= 0 && fy < HW) {
+      const idx = (fy | 0) * HW + (fx | 0);
+      const c = ++hist[idx]; if (c > mx) mx = c;
+      const dx = x - cx, dy = y - cy, r = Math.sqrt(dx * dx + dy * dy);
+      if (r > 1e-12) { hC[idx] += dx / r; hS[idx] += dy / r; }
+    }
+  }
+  curState = s; histMax = mx; totalPts += n; displayDirty = true;
+}
+
+function buildGpu(cnt, cs, sn, out, N, max) {
+  const inv = max > 0 ? 1 / Math.log(max + 1) : 0;
+  for (let i = 0; i < N; i++) {
+    const c = cnt[i], j = i * 3;
+    if (c > 0) { out[j] = Math.log(c + 1) * inv; out[j + 1] = cs[i] / c; out[j + 2] = sn[i] / c; }
+    else       { out[j] = 0; out[j + 1] = 0; out[j + 2] = 0; }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DYNAMIC UI  — attractor dropdown, parameter sliders, presets
+   ═══════════════════════════════════════════════════════════════════ */
+const attSel = document.getElementById('att');
+ATTRACTORS.forEach((a, i) => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = a.name + (a.name === 'Symmetric Icon' ? '  ✦' : '');
+  attSel.appendChild(o);
+});
+attSel.value = P.att;
+attSel.addEventListener('change', () => selectAttractor(parseInt(attSel.value)));
+
+function selectAttractor(i) {
+  P.att = i;
+  const att = cur();
+  P.v = att.presets[0][1].slice();
+  document.getElementById('formula').innerHTML = att.formula;
+  document.getElementById('author').textContent = 'by ' + att.author;
+  buildParamSliders();
+  buildPresets();
+  defaultLanes(); buildLanes();
+  bounds = null;
+  needsReset = true;
+}
+
+function buildParamSliders() {
+  const att = cur(), box = document.getElementById('params');
+  box.innerHTML = att.params.map((pd, i) =>
+    `<div class="row"><span class="lbl">${pd.label}</span>` +
+    `<input type="range" id="sp${i}" min="${pd.min}" max="${pd.max}" step="${pd.step}" value="${P.v[i]}">` +
+    `<span class="val" id="vp${i}">${fmt(pd, P.v[i])}</span></div>`).join('');
+  att.params.forEach((pd, i) => {
+    document.getElementById('sp' + i).addEventListener('input', e => {
+      let v = parseFloat(e.target.value); if (pd.int) v = Math.round(v);
+      P.v[i] = v;
+      document.getElementById('vp' + i).textContent = fmt(pd, v);
+      needsReset = true;
+    });
+  });
+}
+
+function syncParamSliders() {
+  cur().params.forEach((pd, i) => {
+    document.getElementById('sp' + i).value = P.v[i];
+    document.getElementById('vp' + i).textContent = fmt(pd, P.v[i]);
+  });
+}
+
+function buildPresets() {
+  const att = cur(), box = document.getElementById('presets');
+  document.getElementById('presetTitle').textContent =
+    att.id === 'symicon' ? 'presets ("symmetry in chaos")' : 'presets (softology / bourke)';
+  box.innerHTML = att.presets.map(([name, v], i) => {
+    const sub = att.id === 'symicon'
+      ? `n = ${v[5]}`
+      : v.slice(0, Math.min(3, v.length)).map(x => (+x).toFixed(2)).join(' ');
+    return `<button class="pbtn" onclick="applyPreset(${i})">${name}<br><small>${sub}</small></button>`;
+  }).join('');
+}
+
+function applyPreset(i) {
+  P.v = cur().presets[i][1].slice();
+  syncParamSliders();
+  bounds = null;
+  needsReset = true;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ANIMATION  — lanes adapt to the current attractor's parameters
+   ═══════════════════════════════════════════════════════════════════ */
+const EXTRA = [['exposure','Exp',0.1,4],['gamma','Gam',0.1,1.5],['hue','Hue',0,1]];
+let LANES = [];
+let animPlaying = false, animT0 = 0;
+
+function laneOptions() {
+  return cur().params.map((pd, i) => ['p' + i, pd.label]).concat(EXTRA.map(e => [e[0], e[1]]));
+}
+function getVal(key) { return key[0] === 'p' && key.length <= 2 ? P.v[+key.slice(1)] : P[key]; }
+
+function setVal(key, val) {
+  if (key[0] === 'p' && key.length <= 2) {
+    const i = +key.slice(1), pd = cur().params[i];
+    if (!pd) return;
+    P.v[i] = pd.int ? Math.round(val) : val;
+    document.getElementById('sp' + i).value = P.v[i];
+    document.getElementById('vp' + i).textContent = fmt(pd, P.v[i]);
+    needsReset = true;
+  } else {
+    P[key] = val;
+    const map = { exposure:['exp','vexp'], gamma:['gam','vgam'], hue:['hue','vhue'] }[key];
+    if (map) {
+      document.getElementById(map[0]).value = val;
+      document.getElementById(map[1]).textContent = val.toFixed(2);
+    }
+  }
+}
+
+/* Default lanes: first params oscillate ±8 % of their range around
+   the current value; first two lanes enabled. */
+function defaultLanes() {
+  const att = cur(), n = att.params.length;
+  LANES = [];
+  for (let i = 0; i < 4; i++) {
+    if (i < n) {
+      const pd = att.params[i], v = P.v[i];
+      const span = (pd.max - pd.min) * 0.08;
+      const cl = x => Math.min(pd.max, Math.max(pd.min, x));
+      const r = x => pd.int ? Math.round(x) : +x.toFixed(pd.dec);
+      LANES.push({ en: i < 2, p: 'p' + i, f: r(cl(v - span)), t: r(cl(v + span)) });
+    } else {
+      const e = EXTRA[(i - n) % EXTRA.length];
+      const dflt = { exposure:[0.8, 2.0], gamma:[0.3, 0.6], hue:[0, 1] }[e[0]];
+      LANES.push({ en:false, p:e[0], f:dflt[0], t:dflt[1] });
+    }
+  }
+}
+
+function buildLanes() {
+  const opts = laneOptions();
+  document.getElementById('lanes').innerHTML = LANES.map((ln, i) =>
+    `<div class="arow">` +
+    `<input type="checkbox" id="aen${i}"${ln.en ? ' checked' : ''} onchange="syncLane(${i})">` +
+    `<select id="ap${i}" class="apsel" onchange="syncLane(${i})">` +
+      opts.map(([v, l]) => `<option value="${v}"${v === ln.p ? ' selected' : ''}>${l}</option>`).join('') +
+    `</select>` +
+    `<input type="number" id="af${i}" class="anum" value="${ln.f}" step="0.01" onchange="syncLane(${i})">` +
+    `<span class="aarrow">→</span>` +
+    `<input type="number" id="at${i}" class="anum" value="${ln.t}" step="0.01" onchange="syncLane(${i})">` +
+    `</div>`).join('');
+}
+
+function syncLane(i) {
+  LANES[i].en = document.getElementById('aen' + i).checked;
+  LANES[i].p  = document.getElementById('ap' + i).value;
+  LANES[i].f  = parseFloat(document.getElementById('af' + i).value) || 0;
+  LANES[i].t  = parseFloat(document.getElementById('at' + i).value) || 0;
+}
+
+function tickAnim(now) {
+  if (!animPlaying) return;
+  const spd = parseFloat(document.getElementById('aspd').value);
+  const t = (now - animT0) / 1000 * spd;
+  LANES.forEach((ln, i) => {
+    if (!ln.en) return;
+    const wave = 0.5 - 0.5 * Math.cos((t + i * 0.25) * Math.PI * 2);
+    setVal(ln.p, ln.f + wave * (ln.t - ln.f));
+  });
+}
+
+function toggleAnim() {
+  animPlaying = !animPlaying;
+  const btn = document.getElementById('playBtn');
+  if (animPlaying) { animT0 = performance.now(); btn.textContent = '■  Stop'; btn.style.color = '#f87'; }
+  else { btn.textContent = '▶  Play'; btn.style.color = '#378ADD'; bounds = null; needsReset = true; }
+}
+document.getElementById('aspd').addEventListener('input', function () {
+  document.getElementById('vaspd').textContent = parseFloat(this.value).toFixed(2);
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   WEBGL 2
+   ═══════════════════════════════════════════════════════════════════ */
+const cv = document.getElementById('c');
+const gl = cv.getContext('webgl2', { preserveDrawingBuffer:true, alpha:false });
+if (!gl) alert('WebGL2 is not supported in this browser.');
+const floatLinear = !!gl.getExtension('OES_texture_float_linear');
+const FILTER = floatLinear ? gl.LINEAR : gl.NEAREST;   /* safe fallback */
+
+const VS = `#version 300 es
+layout(location=0) in vec2 a;
+void main(){ gl_Position = vec4(a, 0, 1); }`;
+
+/* R = log density, G/B = average direction (cos, sin) from centre.
+   The square histogram is fitted aspect-correct into the canvas and
+   rotated around the centre (uRot). */
+const FS = `#version 300 es
+precision highp float;
+uniform sampler2D uData;
+uniform vec2  uRes;
+uniform float uExp, uGam, uRot, uHue;
+uniform vec3  uBg;
+uniform int   uPal;
+out vec4 O;
+
+vec3 hsv2rgb(float h, float s, float v){
+  vec4 K = vec4(1., 2./3., 1./3., 3.);
+  vec3 p = abs(fract(vec3(h) + K.xyz) * 6. - K.www);
+  return v * mix(K.xxx, clamp(p - K.xxx, 0., 1.), s);
+}
+
+vec3 pal(float t, float hue){
+  t = clamp(t, 0., 1.);
+  if (uPal == 0) return vec3(pow(t,.45), pow(t,1.8), pow(t,7.));                               /* Fire    */
+  if (uPal == 1) return vec3(pow(t,7.), pow(t,1.8), pow(t,.45));                               /* Ocean   */
+  if (uPal == 2) return 0.5 + 0.5*cos(6.283*(vec3(0.,.33,.67) + t*.65 + .35)) * pow(t,.3);     /* Plasma  */
+  if (uPal == 3) return vec3(pow(t,.55)*.95, pow(t,.75)*.75, pow(t,2.5)*.3) + vec3(t*t*t)*.5;  /* Gold    */
+  if (uPal == 4) return vec3(pow(t,3.5), pow(t,.55), pow(t,.9)) * 1.05;                        /* Mint    */
+  if (uPal == 5) return vec3(pow(t,.5));                                                        /* Mono    */
+  if (uPal == 6) {                                                                              /* Rainbow */
+    float sat = mix(.9, .15, pow(t, .5));
+    return hsv2rgb(hue, sat, 1.) * pow(t, .35);
+  }
+  vec3 c = mix(hsv2rgb(hue, .38, 1.), vec3(1.), .25);                                           /* Pastel  */
+  return c * pow(t, .5);
+}
+
+void main(){
+  vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y);
+  float cr = cos(uRot), sr = sin(uRot);
+  p = vec2(cr*p.x - sr*p.y, sr*p.x + cr*p.y);
+  vec2 uv = p + 0.5;
+  if (uv.x < 0. || uv.x > 1. || uv.y < 0. || uv.y > 1.) { O = vec4(uBg, 1.); return; }
+
+  vec3 d = texture(uData, uv).rgb;
+  if (d.r <= 0.) { O = vec4(uBg, 1.); return; }
+  float hue = fract(atan(d.b, d.g) / 6.2831853 + 0.5 + uHue);
+  float v   = pow(clamp(d.r * uExp, 0., 1.), uGam);
+  vec3 col  = pal(v, hue);
+  /* let a custom background show through faint regions */
+  col += uBg * (1. - clamp(v * 1.5, 0., 1.));
+  O = vec4(col, 1.);
+}`;
+
+function buildProg(vs, fs) {
+  const p = gl.createProgram();
+  [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].forEach(([t, s]) => {
+    const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(sh));
+    gl.attachShader(p, sh);
+  });
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  return p;
+}
+const prog = buildProg(VS, FS);
+
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+
+function makeTex(size, data) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, size, size, 0, gl.RGB, gl.FLOAT, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, FILTER);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, FILTER);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+const dataTex = makeTex(HW, null);
+
+const U = {};
+['uData','uRes','uExp','uGam','uRot','uHue','uBg','uPal'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+function uploadLive() {
+  buildGpu(hist, hC, hS, gpu, HW * HW, histMax);
+  gl.bindTexture(gl.TEXTURE_2D, dataTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, HW, HW, gl.RGB, gl.FLOAT, gpu);
+  displayDirty = false;
+}
+
+function display(tex, w, h) {
+  gl.useProgram(prog); gl.bindVertexArray(vao);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.uniform1i(U.uData, 0);        gl.uniform2f(U.uRes, w, h);
+  gl.uniform1f(U.uExp, P.exposure); gl.uniform1f(U.uGam, P.gamma);
+  gl.uniform1f(U.uRot, rotAngle);  gl.uniform1f(U.uHue, P.hue);
+  gl.uniform3f(U.uBg, ...P.bgcol); gl.uniform1i(U.uPal, P.palette);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RENDER LOOP  (paused while exporting)
+   ═══════════════════════════════════════════════════════════════════ */
+let W = 0, H = 0;
+function rsz() {
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (w === W && h === H) return;
+  cv.width = W = w; cv.height = H = h;
+}
+
+const ANIM_TARGET = 200000, ANIM_BATCH = 200000, STATIC_BATCH = 400000;
+const staticTarget = () => parseInt(document.getElementById('qual').value);
+
+(function loop(now = performance.now()) {
+  requestAnimationFrame(loop);
+  if (isExporting) return;
+
+  tickAnim(now); rsz();
+  if (needsReset) resetHistogram();
+
+  const target = animPlaying ? ANIM_TARGET : staticTarget();
+  const batch  = animPlaying ? ANIM_BATCH  : STATIC_BATCH;
+  if (totalPts < target) addBatch(Math.min(batch, target - totalPts));
+  if (displayDirty) uploadLive();
+
+  gl.viewport(0, 0, W, H);
+  display(dataTex, W, H);
+
+  const qf = document.getElementById('qfill'), qs = document.getElementById('qstat');
+  if (!animPlaying) {
+    qf.style.width = Math.min(totalPts / staticTarget() * 100, 100) + '%';
+    qs.textContent = totalPts >= staticTarget()
+      ? `${(totalPts / 1e6).toFixed(1)}M pts — done`
+      : `${(totalPts / 1e6).toFixed(2)}M / ${(staticTarget() / 1e6).toFixed(0)}M pts…`;
+  } else {
+    qf.style.width = '100%';
+    qs.textContent = `Anim — ${(totalPts / 1e3).toFixed(0)}K pts / frame`;
+  }
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   PNG EXPORT
+   Render loop is paused (isExporting) so nothing can overwrite the
+   canvas between the draw call and the PNG readback.
+   ═══════════════════════════════════════════════════════════════════ */
+async function startExport() {
+  const btn = document.getElementById('exportBtn');
+  const pf = document.getElementById('pfill'), ps = document.getElementById('pstat');
+  btn.disabled = true;
+
+  const md = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  const mr = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+  let sz = parseInt(document.getElementById('imgres').value);
+  const lim = Math.min(md[0], md[1], mr);
+  let note = '';
+  if (sz > lim) { sz = lim; note = ` (GPU max ${lim}px)`; }
+
+  const hR   = Math.min(sz, 2048);
+  const npts = Math.round(staticTarget() * (hR / HW) * (hR / HW));
+  const yd = (p, m) => new Promise(r => { pf.style.width = p + '%'; ps.textContent = m; setTimeout(r, 0); });
+
+  isExporting = true;
+  try {
+    const att = cur(), v = P.v.slice();
+    await yd(0, 'Finding attractor bounds…');
+    const eb = findBounds(att, v, 120000);
+
+    await yd(3, 'Allocating export buffers…');
+    const eH = new Uint32Array(hR * hR), eC = new Float32Array(hR * hR), eS = new Float32Array(hR * hR);
+
+    const step = att.make(v);
+    let s = att.init(v);
+    for (let i = 0; i < att.warm; i++) { step(s); if (!isFiniteState(s)) s = att.init(v); }
+
+    const { minX, minY, invR, cx, cy } = eb, k = invR * hR;
+    let eMax = 0, done = 0;
+    const CHUNK = 500000;
+    while (done < npts) {
+      const n = Math.min(CHUNK, npts - done);
+      for (let i = 0; i < n; i++) {
+        step(s);
+        const x = s.x, y = s.y;
+        if (!(x > -1e6 && x < 1e6 && y > -1e6 && y < 1e6)) { s = att.init(v); continue; }
+        const fx = (x - minX) * k, fy = (y - minY) * k;
+        if (fx >= 0 && fx < hR && fy >= 0 && fy < hR) {
+          const idx = (fy | 0) * hR + (fx | 0);
+          const c = ++eH[idx]; if (c > eMax) eMax = c;
+          const dx = x - cx, dy = y - cy, r = Math.sqrt(dx * dx + dy * dy);
+          if (r > 1e-12) { eC[idx] += dx / r; eS[idx] += dy / r; }
+        }
+      }
+      done += n;
+      await yd(5 + Math.round(done / npts * 80), `Iterating ${(done / 1e6).toFixed(1)}M / ${(npts / 1e6).toFixed(1)}M pts…`);
+    }
+
+    await yd(86, 'Normalising…');
+    const eG = new Float32Array(hR * hR * 3);
+    buildGpu(eH, eC, eS, eG, hR * hR, eMax);
+
+    await yd(90, 'Uploading texture…');
+    const exTex = makeTex(hR, eG);
+
+    await yd(93, 'Rendering…');
+    cv.width = sz; cv.height = sz;
+    gl.viewport(0, 0, sz, sz);
+    display(exTex, sz, sz);
+    gl.finish();
+
+    pf.style.width = '97%'; ps.textContent = 'Encoding PNG…';
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    const link = document.createElement('a');
+    const vals = v.map(x => (+x).toFixed(3)).join('_');
+    link.download = `${att.id}_${vals}_${sz}px.png`;
+    link.href = blob ? URL.createObjectURL(blob) : cv.toDataURL('image/png');
+    link.click();
+    if (blob) setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+
+    gl.deleteTexture(exTex);
+    pf.style.width = '100%';
+    ps.textContent = `Done — ${(npts / 1e6).toFixed(1)}M pts at ${sz}×${sz}px${note}`;
+  } catch (err) {
+    console.error(err);
+    ps.textContent = 'Export failed: ' + err.message;
+  } finally {
+    W = 0; H = 0;                 /* force the live canvas to re-size */
+    displayDirty = true;
+    btn.disabled = false;
+    isExporting = false;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONTROLS
+   ═══════════════════════════════════════════════════════════════════ */
+const hexToRgb = h => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+
+[['exp','vexp','exposure'], ['gam','vgam','gamma'], ['hue','vhue','hue']].forEach(([id, vid, key]) => {
+  document.getElementById(id).addEventListener('input', e => {
+    P[key] = parseFloat(e.target.value);
+    document.getElementById(vid).textContent = P[key].toFixed(2);
+  });
+});
+document.getElementById('pal').addEventListener('change', e => { P.palette = parseInt(e.target.value); });
+document.getElementById('qual').addEventListener('change', () => { needsReset = true; });
+document.getElementById('bgcol').addEventListener('input', e => { P.bgcol = hexToRgb(e.target.value); });
+
+/* ── Right-click drag rotates the attractor ─────────────────────────── */
+function setRot(a) {
+  rotAngle = a;
+  document.getElementById('vrot').textContent = (a * 180 / Math.PI).toFixed(1) + '°';
+}
+let rDrag = false, rX = 0;
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('mousedown', e => { if (e.button === 2) { rDrag = true; rX = e.clientX; cv.style.cursor = 'grabbing'; } });
+window.addEventListener('mouseup', e => { if (e.button === 2) { rDrag = false; cv.style.cursor = 'crosshair'; } });
+window.addEventListener('mousemove', e => {
+  if (!rDrag) return;
+  setRot(rotAngle + (e.clientX - rX) * 0.006);
+  rX = e.clientX;
+});
+
+/* ── Start ──────────────────────────────────────────────────────────── */
+selectAttractor(P.att);
+</script>
+</body>
+</html>
