@@ -17,7 +17,7 @@ Strange Attractors are plots of relatively simple formulas, they are created by 
 * There are several templates integrated
 
 ## Screen Shot (click to visit)
-[![watch](images/screen.jpg)] (https://smice-art.github.io/Strange-Attractor)
+[![watch](images/screen.jpg)](https://smice-art.github.io/Strange-Attractor)
 
 
 | Object | Preview |
